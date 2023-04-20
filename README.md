@@ -31,7 +31,6 @@ You can simply install EXPERT-lightning using setuptools, we recommend creating 
 
 ```bash
 conda create -n expert-lightning python=3.10  # Create a new virtual environment
-environment
 python setup.py install    # Install EXPERT-lightning
 expert init               # Initialize EXPERT and install NCBI taxonomy database
 ```
