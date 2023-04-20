@@ -37,7 +37,7 @@ expert init               # Initialize EXPERT and install NCBI taxonomy database
 
 ## Quick start
 
-Here we quickly go-through basic functionalities of EXPERTthrough a case study, which have already been conducted in our preprinted [paper](https://doi.org/10.1101/2021.01.29.428751). We also provided more functional show-cases in another [repository](https://github.com/HUST-NingKang-Lab/EXPERT-use-cases). 
+Here we quickly go-through basic functionalities of EXPERT through a case study, which have already been conducted in our preprinted [paper](https://doi.org/10.1101/2021.01.29.428751). We also provided more functional show-cases in another [repository](https://github.com/HUST-NingKang-Lab/EXPERT-use-cases). 
 
 #### Things to know before starting
 
