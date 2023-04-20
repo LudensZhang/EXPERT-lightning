@@ -55,7 +55,7 @@ Please follow our instructions below and make sure all these commands were run o
 
 - Download the fundamental model and dataset to be used. Here `CM` is a abbreviation term of `countMatrix`, which is a format of abundance data (each row represents a taxon, and each column represents a sample/run). `Mapper` is another important input of EXPERT, which records source biomes for input samples.
 
-**Note**: the disease model is trained by EXPERT v0.X, which is not compatible with EXPERT-lightning, you need to convert the model to EXPERT-lightning format by [EXPERT-model_converter](https://github.com/LudensZhang/EXPERT-model_converter)
+**Note**: The disease model is trained by EXPERT v0.X, which is not compatible with EXPERT-lightning, you need to convert the model to EXPERT-lightning format by [EXPERT-model_converter](https://github.com/LudensZhang/EXPERT-model_converter)
 
 
 ```bash
