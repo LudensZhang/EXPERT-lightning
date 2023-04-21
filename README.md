@@ -30,14 +30,18 @@ This is our beta version, any comments or insights would be greatly appreciated.
 You can simply install EXPERT-lightning using setuptools, we recommend creating a new virtual environment before installing EXPERT-lightning via `conda` or `virtualenv`. 
 
 ```bash
+<<<<<<< HEAD
 conda env create -f environment.yml  # Create a new virtual environment
+=======
+conda create -n expert-lightning python=3.10  # Create a new virtual environment
+>>>>>>> 3d596da0e05017a7c21d1a54f4ebb15e2a7ff83a
 python setup.py install    # Install EXPERT-lightning
 expert init               # Initialize EXPERT and install NCBI taxonomy database
 ```
 
 ## Quick start
 
-Here we quickly go-through basic functionalities of EXPERTthrough a case study, which have already been conducted in our preprinted [paper](https://doi.org/10.1101/2021.01.29.428751). We also provided more functional show-cases in another [repository](https://github.com/HUST-NingKang-Lab/EXPERT-use-cases). 
+Here we quickly go-through basic functionalities of EXPERT through a case study, which have already been conducted in our preprinted [paper](https://doi.org/10.1101/2021.01.29.428751). We also provided more functional show-cases in another [repository](https://github.com/HUST-NingKang-Lab/EXPERT-use-cases). 
 
 #### Things to know before starting
 
@@ -55,7 +59,7 @@ Please follow our instructions below and make sure all these commands were run o
 
 - Download the fundamental model and dataset to be used. Here `CM` is a abbreviation term of `countMatrix`, which is a format of abundance data (each row represents a taxon, and each column represents a sample/run). `Mapper` is another important input of EXPERT, which records source biomes for input samples.
 
-**Note**: the disease model is trained by EXPERT v0.X, which is not compatible with EXPERT-lightning, you need to convert the model to EXPERT-lightning format by [EXPERT-model_converter](https://github.com/LudensZhang/EXPERT-model_converter)
+**Note**: The disease model is trained by EXPERT v0.X, which is not compatible with EXPERT-lightning, you need to convert the model to EXPERT-lightning format by [EXPERT-model_converter](https://github.com/LudensZhang/EXPERT-model_converter)
 
 
 ```bash
