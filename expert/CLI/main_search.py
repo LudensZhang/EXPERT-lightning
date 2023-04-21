@@ -3,7 +3,7 @@ import os
 import  pandas as pd
 from expert.CLI.CLI_utils import find_pkg_resource
 import torch
-
+        
 def search(cfg, args):
 
     # Read data
@@ -14,13 +14,19 @@ def search(cfg, args):
 
     # Build EXPERT model
     model = Model(phylogeny=phylogeny, restore_from=args.model,
-                  open_set=args.measure_unknown)
+                  open_set=args.measure_unknown, regression=args.rg)
     X = model.encoder(X).reshape(X.shape[0], X.shape[1] * phylogeny.shape[1])
     X = model.standardize(X)
     
 
     # Calculate source contribution
     contrib_arrs = model(X)
+    if args.rg:
+        result = pd.DataFrame(contrib_arrs.detach().numpy(), index=sampleIDs, columns=['y_predicted'])
+        os.makedirs(args.output, exist_ok=True)
+        result.to_csv(os.path.join(args.output, 'predicted.csv'))
+        return
+    
     contrib_arrs = model.cal_proba(contrib_arrs)
     
     if model.n_layers == 1:

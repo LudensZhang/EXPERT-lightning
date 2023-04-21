@@ -2,6 +2,7 @@ from expert.src.evaluator import Evaluator
 import pandas as pd
 import os
 from expert.src.utils import get_dmax
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 from tqdm import trange
 import numpy as np
 from joblib import Parallel
@@ -11,7 +12,7 @@ class args(object):
         self.model = 'test/independent_model'
         self.input = 'test/independent_results'
         self.output = 'test/independent_eval'
-        self.labels = 'test/SourceLabels.h5'
+        self.labels = 'test/y_test.h5'
         self.silence = False
         self.in_cm = True
         self.db_file = '/home/zhanghaohong/.etetoolkit/taxa.sqlite'
@@ -23,9 +24,24 @@ class args(object):
         self.dropout_rate = 0.1
         self.val_split = 0.1
         self.hide_warnings = True
-
+        self.rg = True
+        
+def R2(y_true, y_pred):
+    y_true = y_true.to_numpy()
+    y_pred = y_pred.to_numpy()
+    cov = np.cov(y_true, y_pred, rowvar=False)
+    return cov[0, 1]/np.sqrt(cov[0, 0]*cov[1, 1])
 
 def evaluate(cfg, args):
+    if args.rg:
+        predictions = pd.read_csv(os.path.join(args.input, 'predicted.csv'), index_col=0)
+        sources = pd.read_hdf(args.labels, key='rg').loc[predictions.index, :]
+        mae, mse, r2 = mean_absolute_error(sources, predictions), mean_squared_error(sources, predictions), R2(sources, predictions)
+        result_df = pd.DataFrame({'MAE': [mae], 'MSE': [mse], 'R2': [r2]})
+        os.makedirs(args.output, exist_ok=True)
+        result_df.to_csv(os.path.join(args.output, 'result.csv'))
+        return 
+        
     layers = [os.path.join(args.input, i) for i in sorted(os.listdir(args.input), key=lambda x: int(x.split('.')[0].split('-')[1]))]
     np.random.seed(0)
     #idx = np.random.choice(np.arange(100000), 10000)

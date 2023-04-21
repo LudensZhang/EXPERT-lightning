@@ -44,9 +44,13 @@ class Model(LightningModule):
         self.expand_dims = torch.unsqueeze
         self.concat = torch.cat
         self.dropout = nn.Dropout(dropout_rate)
-        self.rg = regression
         self.open_set = open_set
         self.num_features = phylogeny.shape[0]*phylogeny.shape[1]
+        self.regression = regression
+        
+        if ontology and regression:
+            raise ValueError('Regression model does not need ontology.')
+        
         if ontology:
             self.ontology = ontology
             self.labels, self.layer_units = parse_otlg(self.ontology)
@@ -61,17 +65,28 @@ class Model(LightningModule):
                                  for layer, n_units in enumerate(self.layer_units)])
         elif restore_from:
             self.__restore_from(restore_from)
-            self.n_layers = len(self.spec_outputs)
+            self.n_layers = len(self.spec_outputs) if not self.regression else 1
+        
+        elif regression:
+            self.statistics = pd.DataFrame(index=range(self.num_features), columns=['mean', 'std'], dtype=np.float32)
+            self.base = self.init_base_block(num_features=self.num_features) 
+            self.spec_outputs = self.init_regression_block()
+        
         else:
             raise ValueError('Please given correct model path to restore, '
                              'or specify layer_units to build model from scratch.')
         self.encoder = self.init_encoder_block(phylogeny)
-        self.spec_postprocs = nn.ModuleList([self.init_post_proc_module(name='l{}'.format(layer + 2)) for layer in range(self.n_layers)])
+        if not regression:
+            self.spec_postprocs = nn.ModuleList([self.init_post_proc_module(name='l{}'.format(layer + 2)) for layer in range(self.n_layers)])
 
     def forward(self, x):
         x = x.view(-1, self.num_features)
         x = self.dropout(x)
         base = self.base(x)
+        
+        if self.regression:
+            return self.spec_outputs(base)
+        
         inter_logits = [self.spec_inters[i](base) for i in range(self.n_layers)]
         integ_logits = []
         for layer in range(self.n_layers):
@@ -97,10 +112,10 @@ class Model(LightningModule):
     
     def training_step(self, batch, batch_idx):
         x, y = batch
-        loss = nn.MSELoss() if self.rg else nn.BCEWithLogitsLoss()
+        loss = nn.L1Loss() if self.regression else nn.BCEWithLogitsLoss()
         y_hat = self(x)
         
-        if not self.rg:
+        if not self.regression:
             y = torch.split(y, self.layer_units, dim=1)
             loss = [loss(y_hat[i], y[i]) for i in range(self.n_layers)]
             loss = torch.stack(loss)
@@ -113,10 +128,10 @@ class Model(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        loss = nn.MSELoss() if self.rg else nn.BCEWithLogitsLoss()
+        loss = nn.L1Loss() if self.regression else nn.BCEWithLogitsLoss()
         y_hat = self(x)
         
-        if not self.rg:
+        if not self.regression:
             y = torch.split(y, self.layer_units, dim=1)
             loss = [loss(y_hat[i], y[i]) for i in range(self.n_layers)]
             loss = torch.stack(loss)
@@ -145,15 +160,21 @@ class Model(LightningModule):
         return contrib
     
     def save_blocks(self, path):
+        os.makedirs(path, exist_ok=True)
+        torch.save(self.base.state_dict(), self.__pthjoin(path, 'base'))
+        self.statistics.to_csv(self.__pthjoin(path, 'statistics.csv'))
+        
+        if self.regression:
+            torch.save(self.spec_outputs.state_dict(), self.__pthjoin(path, 'rg'))
+            return
+            
         inters_dir = self.__pthjoin(path, 'inters')
         integs_dir = self.__pthjoin(path, 'integs')
         outputs_dir = self.__pthjoin(path, 'outputs')
         for dir in [path, inters_dir, integs_dir, outputs_dir]:
             if not os.path.isdir(dir):
                 os.mkdir(dir)
-        torch.save(self.base.state_dict(), self.__pthjoin(path, 'base'))
         self.ontology.to_pickle(self.__pthjoin(path, 'ontology.pkl'))
-        self.statistics.to_csv(self.__pthjoin(path, 'statistics.csv'))
         for layer in range(self.n_layers):
             torch.save(self.spec_inters[layer].state_dict(), self.__pthjoin(inters_dir, str(layer)))
             torch.save(self.spec_integs[layer].state_dict(), self.__pthjoin(integs_dir, str(layer)))
@@ -162,6 +183,16 @@ class Model(LightningModule):
     def __restore_from(self, path):
         otlg_dir = self.__pthjoin(path, 'ontology.pkl')
         base_dir = self.__pthjoin(path, 'base')
+        
+        if self.regression:
+            rg_dir = self.__pthjoin(path, 'rg')
+            self.statistics = pd.read_csv(self.__pthjoin(path, 'statistics.csv'), index_col=0, dtype=np.float32)
+            self.base = self.init_base_block(num_features=self.num_features)
+            self.base.load_state_dict(torch.load(base_dir))
+            self.spec_outputs = self.init_regression_block()
+            self.spec_outputs.load_state_dict(torch.load(rg_dir))
+            return
+            
         inters_dir = self.__pthjoin(path, 'inters')
         integs_dir = self.__pthjoin(path, 'integs')
         outputs_dir = self.__pthjoin(path, 'outputs')
@@ -183,7 +214,7 @@ class Model(LightningModule):
             self.spec_inters[layer].load_state_dict(torch.load(inter_dirs[layer]))
             self.spec_integs[layer].load_state_dict(torch.load(integ_dirs[layer]))
             self.spec_outputs[layer].load_state_dict(torch.load(output_dirs[layer]))
-
+    
     def init_encoder_block(self, phylogeny):
         block = Encoder(phylogeny)
         return block
@@ -197,6 +228,10 @@ class Model(LightningModule):
             nn.ReLU()
         )
         block.apply(relu_init)
+        return block
+    
+    def init_regression_block(self):
+        block = nn.Linear(2**9, 1)
         return block
 
     def init_inter_block(self, index, name, n_units):

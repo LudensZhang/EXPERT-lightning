@@ -3,7 +3,7 @@ import torch
 from expert.src.onn_dataset import ONNDataSet
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, TensorDataset
 from expert.src.utils import read_genus_abu, read_labels, load_otlg, zero_weight_unk, parse_otlg, get_dmax, transfer_weights
 import pandas as pd, numpy as np
 import os
@@ -12,7 +12,10 @@ from expert.CLI.CLI_utils import find_pkg_resource
 def transfer(cfg, args):
     # Read data
     X, idx = read_genus_abu(args.input)
-    Y = read_labels(args.labels, shuffle_idx=idx, dmax=get_dmax(args.labels))
+    if args.rg:
+        Y = [read_labels(args.labels, shuffle_idx=idx, regression=True)]
+    else:
+        Y = read_labels(args.labels, shuffle_idx=idx, dmax=get_dmax(args.labels))
     print('Reordering labels and samples...')
     IDs = sorted(list(set(X.index.to_list()).intersection(Y[0].index.to_list())))
     X = X.loc[IDs, :]
@@ -42,10 +45,15 @@ def transfer(cfg, args):
     dropout_rate = args.dropout_rate
 
     # Build EXPERT model
-    ontology = load_otlg(args.otlg)
-    _, layer_units = parse_otlg(ontology)
+    if args.rg:
+        init_model = Model(phylogeny=phylogeny, dropout_rate=dropout_rate, regression=True)
+    else:
+        ontology = load_otlg(args.otlg)
+        _, layer_units = parse_otlg(ontology)
+        init_model = Model(phylogeny=phylogeny,ontology=ontology, dropout_rate=dropout_rate)
+        
     base_model = Model(phylogeny=phylogeny, restore_from=args.model)
-    init_model = Model(phylogeny=phylogeny, ontology=ontology, dropout_rate=dropout_rate)
+    
 
     # All transferred blocks and layers will be set to be non-trainable automatically.
     model = transfer_weights(base_model, init_model, reuse_levels)
@@ -60,12 +68,11 @@ def transfer(cfg, args):
     X = model.standardize(X)
 
     # Sample weight "zero" to mask unknown samples' contribution to loss
-    sample_weight = [zero_weight_unk(y=y, sample_weight=np.ones(y.shape[0])) for i, y in enumerate(Y)]
-    Y = [y.drop(columns=['Unknown']) for y in Y]
-    Y = [torch.from_numpy(y.to_numpy()).float() for y in Y]
+    Y = Y[0] if args.rg else [y.drop(columns=['Unknown']) for y in Y]
+    Y = torch.from_numpy(Y.to_numpy()).float() if args.rg else [torch.from_numpy(y.to_numpy()).float() for y in Y]
     
     # Create dataset
-    dataset = ONNDataSet(X, Y)
+    dataset = TensorDataset(X, Y) if args.rg else ONNDataSet(X, Y)
     val_size = int(len(X)*args.val_split)
     train_set, val_set = random_split(dataset, [len(dataset) - val_size, val_size])
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=False)
@@ -81,10 +88,11 @@ def transfer(cfg, args):
         finetune_eps += stopper.stopped_epoch
         print('Fine-tuning using optimizer with lr={}...'.format(finetune_lr))
         model.base.requires_grad_(True)
-        for layer in range(model.n_layers):
-            model.spec_inters[layer].requires_grad_(True)
-            model.spec_integs[layer].requires_grad_(True)
-            model.spec_outputs[layer].requires_grad_(True)
+        if not args.rg:
+            for layer in range(model.n_layers):
+                model.spec_inters[layer].requires_grad_(True)
+                model.spec_integs[layer].requires_grad_(True)
+                model.spec_outputs[layer].requires_grad_(True)
         trainer = Trainer(accelerator='auto', max_epochs=finetune_eps, callbacks=[stopper])
         model.lr = finetune_lr
         trainer.fit(model, train_loader, val_loader)

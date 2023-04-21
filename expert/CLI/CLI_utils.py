@@ -58,6 +58,8 @@ def get_CLI_parser():
                        help='The fraction of validation samples.')
     parser.add_argument('-H', '--log', type=str, default=None,
                        help='The path to store training history of expert model.')
+    parser.add_argument('--rg', action='store_true', 
+                        help='Regression mode.')
     parser.add_argument('--dropout-rate', type=float, default=0,
                           help='Set the dropout rate to prevent over-fitting.')
     parser.add_argument('--batch-size', type=int, default=32,
