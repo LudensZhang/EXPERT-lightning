@@ -231,7 +231,24 @@ class Model(LightningModule):
         return block
     
     def init_regression_block(self):
-        block = nn.Linear(2**9, 1)
+        # a block with symbolic regression
+        block = nn.Sequential(
+            nn.Linear(2**9, 128),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 1)
+        )
+            
+        block.apply(relu_init)
+            
         return block
 
     def init_inter_block(self, index, name, n_units):
@@ -320,3 +337,49 @@ class Encoder(nn.Module):
                   [self.expand_dims(F_genus, dim=2)]
         outputs = torch.cat(F_ranks, dim=2)
         return outputs
+        
+class SymbolicRegressionModel(nn.Module):
+    def __init__(self):
+        super(SymbolicRegressionModel, self).__init__()
+        self.fc1 = nn.Linear(512, 10)
+        self.fc2 = nn.Linear(10, 7)
+        self.fc3 = nn.Linear(15, 7)
+        self.fc4 = nn.Linear(20, 1)
+
+    def forward(self, x):
+        x = x.view(-1, 512)
+        
+        # demension reduction
+        x = self.fc1(x)
+        x = nn.functional.relu(x)
+        
+        # First layer
+        residual = x
+        x = self.fc2(x)
+        x = nn.functional.relu(x)
+
+        # Second layer
+        x1 = torch.pow(x[:, 0], 3)
+        x2 = torch.sin(x[:, 1])
+        x3 = torch.tanh(x[:, 2])
+        x4 = x[:, 3] * x[:, 4]
+        x5 = x[:, 5] / (x[:, 6] + 1e-8)
+        x = torch.stack([x1, x2, x3, x4, x5], dim=1)
+
+        # Third layer
+        residual = torch.cat((residual, x), dim=1)
+        x = self.fc3(residual)
+        x = nn.functional.relu(x)
+        
+        # Fourth layer
+        x1 = torch.pow(x[:, 0], 3)
+        x2 = torch.sin(x[:, 1])
+        x3 = torch.tanh(x[:, 2])
+        x4 = x[:, 3] * x[:, 4]
+        x5 = x[:, 5] / (x[:, 6] + 1e-8)
+        x = torch.stack([x1, x2, x3, x4, x5], dim=1)
+        x = torch.cat((residual, x), dim=1)
+
+        # final layer
+        x = self.fc4(x)
+        return x
