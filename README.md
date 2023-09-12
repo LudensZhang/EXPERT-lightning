@@ -30,9 +30,15 @@ This is our beta version, any comments or insights would be greatly appreciated.
 You can simply install EXPERT-lightning using setuptools, we recommend creating a new virtual environment before installing EXPERT-lightning via `conda` or `virtualenv`. 
 
 ```bash
-conda env create -f environment.yml  # Create a new virtual environment
+conda create -n expert-lightning	# Create a new conda environment
+conda activate expert-lightning	# Activate the environment
 python setup.py install    # Install EXPERT-lightning
 expert init               # Initialize EXPERT and install NCBI taxonomy database
+```
+**note:** For GPU acceleration, we recomment users to install the GPU version of PyTorch (version 2.0.0) according to the [official website](https://pytorch.org/get-started/locally/) or create conda environment according to our environment.yaml file.
+
+```bash
+conda env create -f environment.yaml
 ```
 
 ## Quick start
