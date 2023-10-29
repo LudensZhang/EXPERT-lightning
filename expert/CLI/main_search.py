@@ -30,7 +30,7 @@ def search(cfg, args):
     contrib_arrs = model.cal_proba(contrib_arrs)
     
     if model.n_layers == 1:
-        contrib_arrs = [contrib_arrs]
+        contrib_arrs = contrib_arrs
     labels = model.labels
     if model.open_set:
         contrib_layers = {

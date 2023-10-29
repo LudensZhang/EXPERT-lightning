@@ -30,7 +30,6 @@ def parse_otlg(ontology):
     layer_units = [len(label) for layer, label in labels.items()]
     return labels, layer_units
 
-
 class Model(LightningModule):
 
     def __init__(self, 
@@ -112,7 +111,7 @@ class Model(LightningModule):
     
     def training_step(self, batch, batch_idx):
         x, y = batch
-        loss = nn.L1Loss() if self.regression else nn.BCEWithLogitsLoss()
+        loss = nn.MSELoss() if self.regression else nn.BCEWithLogitsLoss()
         y_hat = self(x)
         
         if not self.regression:
@@ -124,11 +123,12 @@ class Model(LightningModule):
             loss = (weight*loss).sum()
         else:
             loss = loss(y_hat, y)
+            self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        loss = nn.L1Loss() if self.regression else nn.BCEWithLogitsLoss()
+        loss = nn.MSELoss() if self.regression else nn.BCEWithLogitsLoss()
         y_hat = self(x)
         
         if not self.regression:
@@ -141,7 +141,7 @@ class Model(LightningModule):
         else:
             loss = loss(y_hat, y)
         
-        self.log('val_loss', loss, prog_bar=True)
+        self.log('val_loss', loss)
         
         return loss
     
@@ -154,8 +154,7 @@ class Model(LightningModule):
     def cal_proba(self, logits):
         if self.n_layers == 1:
             logits = [logits]
-        
-        contrib = [self.spec_postprocs[i](logits[i]) for i in tqdm(range(self.n_layers))]
+        contrib = [self.spec_postprocs[0](logits[i][0]) for i in tqdm(range(self.n_layers))]
         
         return contrib
     
@@ -232,23 +231,7 @@ class Model(LightningModule):
     
     def init_regression_block(self):
         # a block with symbolic regression
-        block = nn.Sequential(
-            nn.Linear(2**9, 128),
-            nn.ReLU(),
-            nn.LayerNorm(128),
-            self.dropout,
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.LayerNorm(128),
-            self.dropout,
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.LayerNorm(128),
-            self.dropout,
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
-        )
+        block = ResidualRegressionModel(input_size=512, dropout_rate=0.3)
             
         block.apply(relu_init)
             
@@ -290,14 +273,23 @@ class Model(LightningModule):
 
     def init_post_proc_module(self, name):
         def cal_unknown(x):
-            unkn =  1 - x.sum(dim=1, keepdim=True)
+            unknown =  1 - x.sum(dim=1, keepdim=True)
             cat_unkn = torch.cat([x, unknown], dim=1)
             return cat_unkn.div(cat_unkn.sum(dim=1, keepdim=True), dim=0)
         
+        class cal_unknown(nn.Module):
+            def __init__(self):
+                super(cal_unknown, self).__init__()
+            
+            def forward(self, x):
+                unknown =  1 - x.sum(dim=1, keepdim=True)
+                cat_unkn = torch.cat([x, unknown], dim=1)
+                return cat_unkn.div(cat_unkn.sum(dim=1, keepdim=True))
+        
         if self.open_set:
             block = nn.Sequential(
-                nn.sigmoid(),
-                cal_unknown
+                nn.Sigmoid(),
+                cal_unknown()
             )
         else:
             block = nn.Sequential(
@@ -340,6 +332,37 @@ class Encoder(nn.Module):
                   [self.expand_dims(F_genus, dim=2)]
         outputs = torch.cat(F_ranks, dim=2)
         return outputs
+    
+class ResidualRegressionModel(nn.Module):
+    def __init__(self, input_size, dropout_rate=0):
+        super(ResidualRegressionModel, self).__init__()
+        self.input_size = input_size
+        
+        self.fc1 = nn.Sequential(
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.Dropout(dropout_rate)
+            )
+        
+        self.hidden = nn.Sequential(
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.LayerNorm(128),
+            nn.Dropout(dropout_rate)
+            )
+        
+        self.output = nn.Linear(128, 1)
+        
+    def forward(self, x):
+        x = x.view(-1, 512)
+        x = self.fc1(x)
+        residual = x
+        x = self.hidden(x)
+        x = x + residual
+        x = self.output(x)
+        return x
+        
         
 class SymbolicRegressionModel(nn.Module):
     def __init__(self):
